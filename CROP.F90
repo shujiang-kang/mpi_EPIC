@@ -1,0 +1,31 @@
+      SUBROUTINE CROP
+!     EPIC1102
+!     THIS SUBPROGRAM PREDICTS DAILY POTENTIAL GROWTH OF TOTAL PLANT
+!     BIOMASS AND ROOTS.
+      USE PARM
+	  XX=.685-.209*ROSP
+	  IF(IEVI==0)THEN
+	      X1=1.-EXP(-XX*SLAI(JJK))
+	  ELSE
+	      X1=EVI
+	  END IF
+      PAR=.0005*SRAD*X1
+	  X2=PAR*AJWA(JJK)
+      IF(ICG==0)THEN
+          X1=MAX(VPD-1.,-.5)
+          XX=(WA(JJK)-WAVP(JJK)*X1)*CLF
+          DDM(JJK)=XX*X2
+	      IF(DDM(JJK)<1.E-10)THEN
+		      DDM(JJK)=0.
+		      RETURN
+		  END IF
+	  ELSE
+          X2=X2*WA(JJK)
+      	  VPDX=.67*(ASVP(TMX+273)-RHD*ASVP(TX+273.))
+          X3=.01*WUB(JJK)*VPDX**(-.5)
+	      X4=SU*X3
+          DDM(JJK)=MIN(X2,X4)		
+	  END IF
+      DM(JJK)=DM(JJK)+DDM(JJK)
+      RETURN
+      END

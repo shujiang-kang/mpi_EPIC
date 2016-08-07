@@ -1,0 +1,736 @@
+module parallel
+
+  implicit none
+   
+  
+
+  ! Debug and Verification Level
+  integer,parameter :: DEBUG_LEVEL = 1 
+	! If > 0, then debug code executed.  Added for parallel_halo_verify()
+
+  integer,parameter :: main_rank = 0
+
+  integer, parameter :: nruns_per_job = 30  ! Number of runs per job
+  integer, parameter :: nparams_per_run = 8 ! Number of parameters per row in EPICRUN
+
+  logical,save :: main_task
+  integer,save :: comm,tasks,this_rank
+
+  interface broadcast
+     module procedure broadcast_character
+     module procedure broadcast_integer
+     module procedure broadcast_integer_1d
+     module procedure broadcast_logical
+     module procedure broadcast_real4
+     module procedure broadcast_real4_1d
+     module procedure broadcast_real8     
+     module procedure broadcast_real8_1d
+  end interface
+
+  interface parallel_print
+     ! Writes a parallel (same on all processors) variable to file by just writing from main_task
+     module procedure parallel_print_integer_2d
+     module procedure parallel_print_real8_2d
+     module procedure parallel_print_real8_3d
+  end interface
+
+contains
+
+  subroutine broadcast_character(c)
+    use mpi
+    implicit none
+    character(len=*) :: c
+    integer :: ierror,n
+    ! begin
+    n = len(c)
+    call mpi_bcast(c,n,mpi_character,main_rank,comm,ierror)
+  end subroutine broadcast_character
+
+  subroutine broadcast_integer(i)
+    use mpi
+    implicit none
+    integer :: i,ierror
+    ! begin
+    call mpi_bcast(i,1,mpi_integer,main_rank,comm,ierror)
+  end subroutine broadcast_integer
+
+  subroutine broadcast_integer_1d(a)
+    use mpi
+    implicit none
+    integer,dimension(:) :: a
+    integer :: ierror
+    ! begin
+    call mpi_bcast(a,size(a),mpi_integer,main_rank,comm,ierror)
+  end subroutine broadcast_integer_1d
+
+  subroutine broadcast_logical(l)
+    use mpi
+    implicit none
+    logical :: l
+    integer :: ierror
+    ! begin
+    call mpi_bcast(l,1,mpi_logical,main_rank,comm,ierror)
+  end subroutine broadcast_logical
+
+  subroutine broadcast_real4(r)
+    use mpi
+    implicit none
+    integer :: ierror
+    real(4) :: r
+    ! begin
+    call mpi_bcast(r,1,mpi_real4,main_rank,comm,ierror)
+  end subroutine broadcast_real4
+
+  subroutine broadcast_real4_1d(a)
+    use mpi
+    implicit none
+    real(4),dimension(:) :: a
+    integer :: ierror
+    ! begin
+    call mpi_bcast(a,size(a),mpi_real4,main_rank,comm,ierror)
+  end subroutine broadcast_real4_1d
+
+  subroutine broadcast_real8(r)
+    use mpi
+    implicit none
+    integer :: ierror
+    real(8) :: r
+    ! begin
+    call mpi_bcast(r,1,mpi_real8,main_rank,comm,ierror)
+  end subroutine broadcast_real8
+
+  subroutine broadcast_real8_1d(a)
+    use mpi
+    implicit none
+    real(8),dimension(:) :: a
+    integer :: ierror
+    ! begin
+    call mpi_bcast(a,size(a),mpi_real8,main_rank,comm,ierror)
+  end subroutine broadcast_real8_1d
+
+  function distributed_execution()
+     ! Returns if running distributed or not.
+     logical distributed_execution
+
+     distributed_execution = .true.
+  end function distributed_execution
+
+#ifdef COMMENTEDOUT
+  function distributed_get_var_integer_2d(ncid,varid,values,start)
+    use mpi
+    implicit none
+    integer :: distributed_get_var_integer_2d,ncid,varid
+    integer,dimension(:) :: start
+    integer,dimension(:,:) :: values
+
+    integer :: ew,i,ierror,ns
+    integer,dimension(4) :: mybounds
+    integer,dimension(:),allocatable :: displs,sendcounts
+    integer,dimension(:,:),allocatable :: bounds
+    integer,dimension(:),allocatable :: sendbuf
+    integer,dimension(:,:),allocatable :: global_values,recvbuf
+
+    ! begin
+
+    if (size(values,1)==local_ewn) then
+       ew = global_ewn
+       ns = global_nsn
+    else if (size(values,1)==local_ewn-1) then
+       ew = global_ewn-1
+       ns = global_nsn-1
+    else
+       call parallel_stop(__FILE__,__LINE__)
+    end if
+    mybounds(1) = ewlb
+    mybounds(2) = ewub
+    mybounds(3) = nslb
+    mybounds(4) = nsub
+    if (main_task) then
+       allocate(bounds(4,tasks))
+    else
+       allocate(bounds(1,1))
+    end if
+    call fc_gather_int(mybounds,4,mpi_integer,bounds,4,&
+       mpi_integer,main_rank,comm)
+    if (main_task) then
+       allocate(global_values(minval(bounds(1,:)):maxval(bounds(2,:)),&
+            minval(bounds(3,:)):maxval(bounds(4,:))))
+       global_values(:,:) = 0
+       distributed_get_var_integer_2d = nf90_get_var(ncid,varid,&
+            global_values(1:ew,1:ns),start)
+       allocate(displs(tasks+1))
+       allocate(sendcounts(tasks))
+       sendcounts(:) = (bounds(2,:)-bounds(1,:)+1)*(bounds(4,:)-bounds(3,:)+1)
+       displs(1) = 0
+       do i = 1,tasks
+          displs(i+1) = displs(i)+sendcounts(i)
+       end do
+       allocate(sendbuf(displs(tasks+1)))
+       do i = 1,tasks
+          sendbuf(displs(i)+1:displs(i+1)) = reshape(&
+               global_values(bounds(1,i):bounds(2,i),bounds(3,i):bounds(4,i)),&
+               (/displs(i+1)-displs(i)/))
+       end do
+    else
+       allocate(displs(1))
+       allocate(sendcounts(1))
+       allocate(sendbuf(1))
+    end if
+    call broadcast(distributed_get_var_integer_2d)
+    allocate(recvbuf(local_ewn,local_nsn))
+    call mpi_scatterv(sendbuf,sendcounts,displs,mpi_integer,&
+         recvbuf,size(recvbuf),mpi_integer,main_rank,comm,ierror)
+    values(:,:) = recvbuf(:size(values,1),:size(values,2))
+    !automatic deallocation
+  end function distributed_get_var_integer_2d
+#endif COMMENTEDOUT
+
+#ifdef COMMENTEDOUT
+  function distributed_put_var_integer_2d(ncid,varid,values,start)
+    use mpi
+    implicit none
+    integer :: distributed_put_var_integer_2d,ncid,varid
+    integer,dimension(:) :: start
+    integer,dimension(:,:) :: values
+
+    integer :: ew,i,ierror,ns
+    integer,dimension(4) :: mybounds
+    integer,dimension(:),allocatable :: displs,recvcounts
+    integer,dimension(:,:),allocatable :: bounds
+    integer,dimension(:),allocatable :: recvbuf
+    integer,dimension(:,:),allocatable :: global_values,sendbuf
+
+    ! begin
+
+    if (size(values,1)==local_ewn) then
+       ew = global_ewn
+       ns = global_nsn
+    else if (size(values,1)==local_ewn-1) then
+       ew = global_ewn-1
+       ns = global_nsn-1
+    else
+       call parallel_stop(__FILE__,__LINE__)
+    end if
+    mybounds(1) = ewlb+lhalo
+    mybounds(2) = ewub-uhalo
+    mybounds(3) = nslb+lhalo
+    mybounds(4) = nsub-uhalo
+    if (main_task) then
+       allocate(bounds(4,tasks))
+    else
+       allocate(bounds(1,1))
+    end if
+    call fc_gather_int(mybounds,4,mpi_integer,bounds,4,&
+       mpi_integer,main_rank,comm)
+    if (main_task) then
+       allocate(global_values(minval(bounds(1,:)):maxval(bounds(2,:)),&
+            minval(bounds(3,:)):maxval(bounds(4,:))))
+       global_values(:,:) = 0
+       allocate(displs(tasks+1))
+       allocate(recvcounts(tasks))
+       recvcounts(:) = (bounds(2,:)-bounds(1,:)+1)*(bounds(4,:)-bounds(3,:)+1)
+       displs(1) = 0
+       do i = 1,tasks
+          displs(i+1) = displs(i)+recvcounts(i)
+       end do
+       allocate(recvbuf(displs(tasks+1)))
+    else
+       allocate(displs(1))
+       allocate(recvcounts(1))
+       allocate(recvbuf(1))
+    end if
+    allocate(sendbuf(mybounds(1):mybounds(2),mybounds(3):mybounds(4)))
+    sendbuf(:,:) = values(1+lhalo:local_ewn-uhalo,1+lhalo:local_nsn-uhalo)
+    call fc_gatherv_int(sendbuf,size(sendbuf),mpi_integer,&
+       recvbuf,recvcounts,displs,mpi_integer,main_rank,comm)
+    if (main_task) then
+       do i = 1,tasks
+          global_values(bounds(1,i):bounds(2,i),bounds(3,i):bounds(4,i)) = &
+               reshape(recvbuf(displs(i)+1:displs(i+1)), &
+               (/bounds(2,i)-bounds(1,i)+1,bounds(4,i)-bounds(3,i)+1/))
+       end do
+       distributed_put_var_integer_2d = nf90_put_var(ncid,varid,&
+            global_values(1:ew,1:ns),start)
+    end if
+    call broadcast(distributed_put_var_integer_2d)
+    !automatic deallocation
+  end function distributed_put_var_integer_2d
+#endif COMMENTEDOUT
+
+  subroutine global_sum(x)
+    use mpi
+    implicit none
+    real(8),dimension(:) :: x
+    
+    integer :: ierror
+    real(8),dimension(size(x)) :: sum
+    ! begin
+    call mpi_allreduce(x,sum,size(x),mpi_real8,mpi_sum,comm,ierror)
+    x(:) = sum(:)
+  end subroutine global_sum
+
+  subroutine parallel_barrier
+    use mpi
+    implicit none
+    integer :: ierror
+    ! begin
+    call mpi_barrier(comm,ierror)
+  end subroutine parallel_barrier
+
+#ifdef COMMENTEDOUT
+  function parallel_close(ncid)
+    implicit none
+    integer :: ncid,parallel_close
+    ! begin
+    if (main_task) parallel_close = nf90_close(ncid)
+    call broadcast(parallel_close)
+  end function parallel_close
+
+  function parallel_create(path,cmode,ncid)
+    implicit none
+    integer :: cmode,ncid,parallel_create
+    character(len=*) :: path
+    ! begin
+    if (main_task) parallel_create = nf90_create(path,cmode,ncid)
+    call broadcast(parallel_create)
+    call broadcast(ncid)
+  end function parallel_create
+    
+  function parallel_def_dim(ncid,name,len,dimid)
+    use netcdf
+    implicit none
+    integer :: dimid,len,ncid,parallel_def_dim
+    character(len=*) :: name
+    ! begin
+    if (main_task) parallel_def_dim = nf90_def_dim(ncid,name,len,dimid)
+    call broadcast(parallel_def_dim)
+    call broadcast(dimid)
+  end function parallel_def_dim
+
+  function parallel_def_var_dimids(ncid,name,xtype,dimids,varid)
+    implicit none
+    integer :: ncid,parallel_def_var_dimids,varid,xtype
+    integer,dimension(:) :: dimids
+    character(len=*) :: name
+    ! begin
+    if (main_task) parallel_def_var_dimids = &
+         nf90_def_var(ncid,name,xtype,dimids,varid)
+    call broadcast(parallel_def_var_dimids)
+    call broadcast(varid)
+  end function parallel_def_var_dimids
+
+  function parallel_def_var_nodimids(ncid,name,xtype,varid)
+    implicit none
+    integer :: ncid,parallel_def_var_nodimids,varid,xtype
+    character(len=*) :: name
+    ! begin
+    if (main_task) parallel_def_var_nodimids = &
+         nf90_def_var(ncid,name,xtype,varid)
+    call broadcast(parallel_def_var_nodimids)
+    call broadcast(varid)
+  end function parallel_def_var_nodimids
+
+  function parallel_enddef(ncid)
+    implicit none
+    integer :: ncid,parallel_enddef
+    ! begin
+    if (main_task) parallel_enddef = nf90_enddef(ncid)
+    call broadcast(parallel_enddef)
+  end function parallel_enddef
+#endif COMMENTEDOUT
+
+  subroutine parallel_finalize
+    use mpi
+    implicit none
+    integer :: ierror
+    ! begin
+    call mpi_finalize(ierror)
+  end subroutine parallel_finalize
+
+#ifdef COMMENTEDOUT
+  function parallel_get_att_character(ncid,varid,name,values)
+    implicit none
+    integer :: ncid,parallel_get_att_character,varid
+    character(len=*) :: name,values
+    ! begin
+    if (main_task) parallel_get_att_character = &
+         nf90_get_att(ncid,varid,name,values)
+    call broadcast(parallel_get_att_character)
+    call broadcast(values)
+  end function parallel_get_att_character
+
+  function parallel_get_att_real4(ncid,varid,name,values)
+    implicit none
+    integer :: ncid,parallel_get_att_real4,varid
+    character(len=*) :: name
+    real(4) :: values
+    ! begin
+    if (main_task) parallel_get_att_real4 = &
+         nf90_get_att(ncid,varid,name,values)
+    call broadcast(parallel_get_att_real4)
+    call broadcast(values)
+  end function parallel_get_att_real4
+
+  function parallel_get_att_real4_1d(ncid,varid,name,values)
+    implicit none
+    integer :: ncid,parallel_get_att_real4_1d,varid
+    character(len=*) :: name
+    real(4),dimension(:) :: values
+    ! begin
+    if (main_task) parallel_get_att_real4_1d = &
+         nf90_get_att(ncid,varid,name,values)
+    call broadcast(parallel_get_att_real4_1d)
+    call broadcast(values)
+  end function parallel_get_att_real4_1d
+
+  function parallel_get_att_real8(ncid,varid,name,values)
+    implicit none
+    integer :: ncid,parallel_get_att_real8,varid
+    character(len=*) :: name
+    real(8) :: values
+    ! begin
+    if (main_task) parallel_get_att_real8 = &
+         nf90_get_att(ncid,varid,name,values)
+    call broadcast(parallel_get_att_real8)
+    call broadcast(values)
+  end function parallel_get_att_real8
+
+  function parallel_get_att_real8_1d(ncid,varid,name,values)
+    implicit none
+    integer :: ncid,parallel_get_att_real8_1d,varid
+    character(len=*) :: name
+    real(8),dimension(:) :: values
+    ! begin
+    if (main_task) parallel_get_att_real8_1d = &
+         nf90_get_att(ncid,varid,name,values)
+    call broadcast(parallel_get_att_real8_1d)
+    call broadcast(values)
+  end function parallel_get_att_real8_1d
+
+  function parallel_get_var_integer_1d(ncid,varid,values)
+    implicit none
+    integer :: ncid,parallel_get_var_integer_1d,varid
+    integer,dimension(:) :: values
+    ! begin
+    if (main_task) parallel_get_var_integer_1d = &
+         nf90_get_var(ncid,varid,values)
+    call broadcast(parallel_get_var_integer_1d)
+    call broadcast(values)
+  end function parallel_get_var_integer_1d
+
+  function parallel_get_var_real4_1d(ncid,varid,values)
+    implicit none
+    integer :: ncid,parallel_get_var_real4_1d,varid
+    real(4),dimension(:) :: values
+    ! begin
+    if (main_task) parallel_get_var_real4_1d = &
+         nf90_get_var(ncid,varid,values)
+    call broadcast(parallel_get_var_real4_1d)
+    call broadcast(values)
+  end function parallel_get_var_real4_1d
+#endif COMMENTEDOUT
+
+  subroutine parallel_initialize
+    use mpi
+    implicit none
+    integer :: ierror
+    ! begin
+    call mpi_init(ierror)
+    comm = mpi_comm_world
+    call mpi_comm_size(comm,tasks,ierror)
+    call mpi_comm_rank(comm,this_rank,ierror)
+    main_task = (this_rank==main_rank)
+  end subroutine parallel_initialize
+
+#ifdef COMMENTEDOUT
+  function parallel_inq_attname(ncid,varid,attnum,name)
+    implicit none
+    integer :: attnum,ncid,parallel_inq_attname,varid
+    character(len=*) :: name
+    ! begin
+    if (main_task) parallel_inq_attname = &
+         nf90_inq_attname(ncid,varid,attnum,name)
+    call broadcast(parallel_inq_attname)
+    call broadcast(name)
+  end function parallel_inq_attname
+
+  function parallel_inq_dimid(ncid,name,dimid)
+    implicit none
+    integer :: dimid,ncid,parallel_inq_dimid
+    character(len=*) :: name
+    ! begin
+    if (main_task) parallel_inq_dimid = nf90_inq_dimid(ncid,name,dimid)
+    call broadcast(parallel_inq_dimid)
+    call broadcast(dimid)
+  end function parallel_inq_dimid
+
+  function parallel_inq_varid(ncid,name,varid)
+    implicit none
+    integer :: ncid,parallel_inq_varid,varid
+    character(len=*) :: name
+    ! begin
+    if (main_task) parallel_inq_varid = nf90_inq_varid(ncid,name,varid)
+    call broadcast(parallel_inq_varid)
+    call broadcast(varid)
+  end function parallel_inq_varid
+
+  function parallel_inquire(ncid,nvariables)
+    implicit none
+    integer :: ncid,parallel_inquire,nvariables
+    ! begin
+    if (main_task) parallel_inquire = nf90_inquire(ncid,nvariables=nvariables)
+    call broadcast(parallel_inquire)
+    call broadcast(nvariables)
+  end function parallel_inquire
+
+  function parallel_inquire_dimension(ncid,dimid,name,len)
+    implicit none
+    integer :: dimid,ncid,parallel_inquire_dimension
+    integer,optional :: len
+    character(len=*),optional :: name
+    
+    integer :: l
+    
+    ! begin
+
+    if (present(name)) then
+       if (main_task) parallel_inquire_dimension = &
+            nf90_inquire_dimension(ncid,dimid,name,len=l)
+       call broadcast(name)
+    else
+       if (main_task) parallel_inquire_dimension = &
+            nf90_inquire_dimension(ncid,dimid,len=l)
+    end if
+    call broadcast(parallel_inquire_dimension)
+    if (present(len)) then
+       call broadcast(l)
+       len = l
+    end if
+  end function parallel_inquire_dimension
+
+  function parallel_inquire_variable(ncid,varid,name,ndims,dimids,natts)
+    implicit none
+    integer :: ncid,parallel_inquire_variable,varid
+    integer,optional :: ndims,natts
+    character(len=*),optional :: name
+    integer,dimension(:),optional :: dimids
+
+    integer :: nd,na
+    ! begin
+    if (present(name)) then
+       if (main_task) parallel_inquire_variable = &
+            nf90_inquire_variable(ncid,varid,name=name)
+       call broadcast(parallel_inquire_variable)
+       call broadcast(name)
+       if (parallel_inquire_variable/=nf90_noerr) return
+    end if
+    if (present(dimids)) then
+       if (main_task) parallel_inquire_variable = &
+            nf90_inquire_variable(ncid,varid,dimids=dimids)
+       call broadcast(parallel_inquire_variable)
+       call broadcast(dimids)
+       if (parallel_inquire_variable/=nf90_noerr) return
+    end if
+    if (main_task) parallel_inquire_variable = &
+         nf90_inquire_variable(ncid,varid,ndims=nd,natts=na)
+    call broadcast(parallel_inquire_variable)
+    if (present(ndims)) then
+       call broadcast(nd)
+       ndims = nd
+    end if
+    if (present(natts)) then
+       call broadcast(na)
+       natts = na
+    end if
+  end function parallel_inquire_variable
+
+  function parallel_open(path,mode,ncid)
+    implicit none
+    integer :: mode,ncid,parallel_open
+    character(len=*) :: path
+    ! begin
+    if (main_task) parallel_open = nf90_open(path,mode,ncid)
+    call broadcast(parallel_open)
+  end function parallel_open
+#endif COMMENTEDOUT
+
+  subroutine parallel_print_integer_2d(name,values)
+    implicit none
+    character(*) :: name
+    integer,dimension(:,:) :: values
+
+    integer,parameter :: u = 33
+    character(3) :: ts
+    integer :: i,j
+
+    ! begin
+    if (main_task) then
+       write(ts,'(i3.3)') tasks
+       open(unit=u,file=name//ts//".txt",form="formatted",status="replace")
+       do j = lbound(values,2),ubound(values,2)
+          do i = lbound(values,1),ubound(values,1)
+             write(u,*) j,i,values(i,j)
+          end do
+          write(u,'()')
+       end do
+       close(u)
+    end if
+
+    call parallel_barrier  ! Only the main_task writes the variable.  Rest wait here.
+    ! automatic deallocation
+  end subroutine parallel_print_integer_2d
+
+  subroutine parallel_print_real8_2d(name,values)
+    implicit none
+    character(*) :: name
+    real(8),dimension(:,:) :: values
+
+    integer,parameter :: u = 33
+    character(3) :: ts
+    integer :: i,j
+
+    ! begin
+    if (main_task) then
+       write(ts,'(i3.3)') tasks
+       open(unit=u,file=name//ts//".txt",form="formatted",status="replace")
+       do j = lbound(values,2),ubound(values,2)
+          do i = lbound(values,1),ubound(values,1)
+             write(u,*) j,i,values(i,j)
+          end do
+          write(u,'()')
+       end do
+       close(u)
+    end if
+
+    call parallel_barrier  ! Only the main_task writes the variable.  Rest wait here.
+  end subroutine parallel_print_real8_2d
+
+  subroutine parallel_print_real8_3d(name,values)
+    implicit none
+    character(*) :: name
+    real(8),dimension(:,:,:) :: values
+
+    integer,parameter :: u = 33
+    character(3) :: ts
+    integer :: i,j
+
+    ! begin
+    if (main_task) then
+       write(ts,'(i3.3)') tasks
+       open(unit=u,file=name//ts//".txt",form="formatted",status="replace")
+       do j = lbound(values,3),ubound(values,3)
+          do i = lbound(values,2),ubound(values,2)
+             write(u,'(2i6,100g15.5e3)') j,i,values(:,i,j)
+          end do
+          write(u,'()')
+       end do
+       close(u)
+    end if
+
+    call parallel_barrier  ! Only the main_task writes the variable.  Rest wait here.
+  end subroutine parallel_print_real8_3d
+
+  function parallel_reduce_sum(x)
+    use mpi
+    implicit none
+    real(8) :: x
+
+    integer :: ierror
+    real(8) :: recvbuf,sendbuf, parallel_reduce_sum
+    ! begin
+    sendbuf = x
+    call mpi_allreduce(sendbuf,recvbuf,1,mpi_real8,mpi_sum,comm,ierror)
+    parallel_reduce_sum = recvbuf
+    return
+  end function parallel_reduce_sum
+
+  function parallel_reduce_max(x)
+    use mpi
+    implicit none
+    real(8) :: x
+
+    integer :: ierror
+    real(8) :: recvbuf,sendbuf, parallel_reduce_max
+    ! begin
+    sendbuf = x
+    call mpi_allreduce(sendbuf,recvbuf,1,mpi_real8,mpi_max,comm,ierror)
+    parallel_reduce_max = recvbuf
+    return
+  end function parallel_reduce_max
+
+  subroutine parallel_stop(file,line)
+    use mpi
+    implicit none
+    integer :: line
+    character(len=*) :: file
+    integer :: ierror
+    ! begin
+    if (main_task) write(0,*) "PARALLEL STOP in ",file," at line ",line
+    call mpi_finalize(ierror)
+    stop "PARALLEL STOP"
+  end subroutine parallel_stop
+
+  subroutine runs_nextnode(worker)
+    ! Called by master waiting for next finished node
+    use mpi
+    implicit none
+    integer,intent(out) :: worker
+    integer :: a(1)
+    integer :: ierror
+    integer*4 :: status(MPI_STATUS_SIZE)
+    call mpi_recv(a,1,mpi_integer,MPI_ANY_SOURCE,0,comm,status,ierror)
+    worker = status(MPI_SOURCE)
+  end subroutine 
+
+  subroutine runs_nodefinished()
+    ! Called by node when it finishes jobs
+    use mpi
+    implicit none
+    integer :: a(1) 
+    integer :: ierror
+    a(1) = 0
+    call mpi_send(a,1,mpi_integer,main_rank,0,comm,ierror)
+  end subroutine runs_nodefinished
+
+  subroutine runs_recv(a, n)
+    use mpi
+    implicit none
+    integer, dimension(nparams_per_run*nruns_per_job) :: a
+    integer,intent(out) :: n 
+    integer :: ierror
+    integer :: status(MPI_STATUS_SIZE)
+  ! integer :: send_buf(nruns_per_job*nparams_per_run)
+  ! MPI_SEND(adata(:,:), nruns_per_job*nparams_per_run, MPI_INTEGER, MPI_ANY, nread, MPI_COMM_WORLD, ierror)
+    call mpi_recv(a,size(a),mpi_integer,main_rank,MPI_ANY_TAG,comm,status, ierror)
+  ! a = reshape(send_buf,(/nruns_per_job,nparams_per_run/))
+    n = status(MPI_TAG)  ! TAG is used to communicate the number of rows sent
+  end subroutine runs_recv
+
+  subroutine runs_send(dest, a, n)
+    use mpi
+    implicit none
+    integer,dimension(:,:),intent(in) :: a
+    integer:: a2(nparams_per_run, nruns_per_job)
+    integer, intent(in) :: n, dest
+    integer :: ierror
+    !integer :: a2(nparams_per_run, nruns_per_job)
+    integer :: send_buf(nruns_per_job*nparams_per_run)
+    integer, parameter :: work_tag = 1001 
+    
+        ! MPI_SEND(adata(:,:), nruns_per_job*nparams_per_run, MPI_INTEGER, MPI_ANY, nread, MPI_COMM_WORLD, ierror)
+    a2 = transpose(a)
+    send_buf = reshape(a2(:,:), shape = (/nruns_per_job* nparams_per_run/))
+    call mpi_send(send_buf,size(send_buf),mpi_integer,dest,work_tag,comm,ierror)
+    
+  end subroutine runs_send
+
+  subroutine shutdown_node(n)
+    use mpi
+    implicit none
+    integer :: a
+    integer,intent(in) :: n  ! node ID
+    integer :: ierror
+    a = 0
+    call mpi_send(a,1,mpi_integer,n,0,comm,ierror) ! send 0 as TAG to shutdown node
+  end subroutine shutdown_node
+end module parallel
