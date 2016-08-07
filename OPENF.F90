@@ -1,0 +1,29 @@
+      SUBROUTINE OPENF
+!     EPIC1102
+!     THIS SUBPROGRAM OPENS FILES.
+      USE PARM
+      
+      CHARACTER(512):: FNM
+      CHARACTER(4)::AXT
+      DIMENSION AXT(30)
+      DATA AXT/".OUT",".ACM",".SUM",".DHY",".DPS",".MFS",".MPS",".ANN",&
+        ".SOT",".DTP",".MCM",".DCS",".SCO",".ACN",".DCN",".SCN",".DGN",&
+        ".DWT",".ACY",".ACO",".DSL",".MWC",".ABR",".ATG",".MSW",".APS",&
+        ".DWC",".DHS",".DGZ",".DNC"/
+
+     ! DManowitz (9/19/2011): If a directory was specified on the command line,
+     ! put files there, rather than 'current' dir.
+      DO I=1,MSO-1
+         IF(AXT(I)/="    ".AND.KFL(I)>0) THEN
+            IF (OUTDIR .NE. "") THEN
+                FNM = TRIM (ADJUSTL (OUTDIR)) // TRIM (ADJUSTL (ASTN))
+            ELSEIF (BASEDIR .NE. "") THEN
+                FNM = TRIM (ADJUSTL (BASEDIR)) // TRIM (ADJUSTL (ASTN))
+            ELSE
+                FNM = TRIM (ADJUSTL (ASTN))
+            END IF
+            OPEN(KW(I),FILE=TRIM(FNM)//AXT(I))
+         END IF
+      END DO
+      RETURN
+      END

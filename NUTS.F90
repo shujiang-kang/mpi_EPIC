@@ -1,0 +1,13 @@
+      SUBROUTINE NUTS(U1,U2,UU)
+!     EPIC1102
+!     THIS SUBPROGRAM CALCULATES THE PLANT STRESS FACTOR CAUSED BY LIMITED
+!     SUPPLY OF N OR P.
+      USE PARM
+      UU=200.*(U1/U2-.5)
+      IF(UU>0.)THEN
+          UU=UU/(UU+EXP(SCRP(8,1)-SCRP(8,2)*UU))
+      ELSE
+          UU=0.
+      END IF
+      RETURN
+      END

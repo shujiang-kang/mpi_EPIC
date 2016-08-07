@@ -1,0 +1,289 @@
+# SRC_DIR    := Source/
+BUILD_BASE := ../build/
+EPIC_VER   := 1102v1
+
+# DManowitz - 1/9/2012: Make the Intel compilers the default, since
+# they seem to have the fewest problems
+ifeq ($(COMPILER),PGI)        # if compiler is PGI
+    F77         := pgf77
+    FLINKER     := pgf77
+    F90         := pgf90
+    F90LINKER   := pgf90
+    # COMP_SUFFIX  := pgi_10_6_TRIAL
+	COMP_SUFFIX  := pgi10.9-0
+    ifndef DEBUG_BUILD
+        OPTFLAGS    := -fast
+        OPT_SUFFIX  := release
+    else
+        OPTFLAGS    := -g
+        OPT_SUFFIX  := debug
+    endif
+# dmanowitz: I would put the else and ifeq on the same line so as to avoid
+# multiple endif's at the end, but on OIC, it won't accept it like that.
+else 
+ifeq ($(COMPILER),GNU)     # if compiler is GNU v4.1
+    F77         := gfortran
+    FLINKER     := gfortran
+    F90         := gfortran
+    F90LINKER   := gfortran
+    COMP_SUFFIX  := gfort4.1
+    ifndef DEBUG_BUILD
+        OPTFLAGS    := -O2
+        OPT_SUFFIX  := release
+    else
+        OPTFLAGS    := -g
+        OPT_SUFFIX  := debug
+    endif
+else 
+ifeq ($(COMPILER),GNU44)   # if compiler is GNU v4.4
+    F77         := gfortran44
+    FLINKER     := gfortran44
+    F90         := gfortran44
+    F90LINKER   := gfortran44
+    COMP_SUFFIX  := gfort4.4
+    ifndef DEBUG_BUILD
+        OPTFLAGS    := -O2
+        OPT_SUFFIX  := release
+    else
+        OPTFLAGS    := -g
+        OPT_SUFFIX  := debug
+    endif
+else                           # else
+    # Default to Intel Compilers
+    F77         := ftn
+    FLINKER     := ftn
+    F90         := ftn
+    F90LINKER   := ftn
+    # COMP_SUFFIX := intel_11_1_072_TRIAL
+	COMP_SUFFIX := intel_11.1.059
+    ifndef DEBUG_BUILD
+    #    OPTFLAGS    := -fast
+        OPTFLAGS    := -g
+        OPT_SUFFIX  := release
+    else
+        OPTFLAGS    := -g
+        OPT_SUFFIX  := debug
+    endif
+endif                          # endif 
+# dmanowitz: See comment above as to why there are multiple endif's here.
+endif
+endif
+EXSUFFIX       := $(OPT_SUFFIX).$(COMP_SUFFIX)
+BUILD_SUFFIX   := $(OPT_SUFFIX)/$(COMP_SUFFIX)/
+BUILD_DIR      := $(BUILD_BASE)$(BUILD_SUFFIX)
+
+MAKE        := make --no-print-directory
+SHELL       := /bin/sh
+#
+LIB_PATH    := 
+FLIB_PATH   := 
+LIB_LIST    := 
+INCLUDE_DIR := -I./
+#
+FFLAGS :=  $(OPTFLAGS) $(INCLUDE_DIR) $(LIB_LIST) 
+FLINKER_OPTS := -v $(FFLAGS)
+FLIBS := $(FLIB_PATH) $(LIB_LIST)
+#
+OBJS_BASE := MODPARM.o \
+ACOUT.o \
+ADAJ.o \
+ADSTN.o \
+AERFC.o \
+AEXINT.o \
+AHEAD.o \
+AICL.o \
+AINIX.o \
+AINLZ.o \
+AINTRI.o \
+AINTRIC.o \
+AINTRO.o \
+AINTRX.o \
+AISHFL.o \
+AISPL.o \
+ALLOCATE_PARMS.o \
+ALPYR.o \
+APAGE.o \
+ARALT.o \
+ARESET.o \
+ASCRV.o \
+ASORT1.o \
+ASORT3.o \
+ASORTI.o \
+ASPLT.o \
+ASVP.o \
+ATIMER.o \
+ATRI.o \
+AUNIF.o \
+AXMON.o \
+BSIM.o \
+CAGRO.o \
+CAHU.o \
+CCONI.o \
+CFRG.o \
+CGROW.o \
+COMMANDL.o \
+CPTBL.o \
+CRGBD.o \
+CROP.o \
+CSTRS.o \
+DATETIME.o \
+EAJL.o \
+EROWN.o \
+ERSC.o \
+ESLOS.o \
+EWEMHKS.o \
+EWER.o \
+EWIK.o \
+EWNINT.o \
+EYCC.o \
+EYSED.o \
+GASDF3.o \
+GASTRANS.o \
+GASTRANS2.o \
+GETCL.o \
+HCNSLP.o \
+HEVP.o \
+HFURD.o \
+HGASP.o \
+HGAWY.o \
+HIRG.o \
+HLGB.o \
+HLGOON.o \
+HPERC.o \
+HPURK.o \
+HQP.o \
+HREXP.o \
+HRFEI.o \
+HRTRI.o \
+HRUNF.o \
+HSGCN.o \
+HSNOM.o \
+HSWBL.o \
+HSWU.o \
+HTR55.o \
+HUSE.o \
+HVOLQ.o \
+HWTBL.o \
+INIFP.o \
+NAJN.o \
+NBL.o \
+NCBL.o \
+NCCONC.o \
+NCNMI.o \
+NCNSTD.o \
+NCONC.o \
+NCONT.o \
+NCQYL.o \
+NDNIT.o \
+NDNITCI.o \
+NDNITAK.o \
+NEVN.o \
+NEVP.o \
+NFALL.o \
+NFERT.o \
+NFIX.o \
+NFTBL.o \
+NITVOL.o \
+NKMIN.o \
+NLCH.o \
+NLGB.o \
+NLIMA.o \
+NLIME.o \
+NPCY.o \
+NPMIN.o \
+NPMN.o \
+NPUP.o \
+NRSPC.o \
+NUK.o \
+NUP.o \
+NUSE.o \
+NUTS.o \
+NYNIT.o \
+NYON.o \
+NYPA.o \
+OPENF.o \
+OPENV.o \
+PESTF.o \
+PSTAPP.o \
+PSTCY.o \
+PSTEV.o \
+PSTTBL.o \
+REALC.o \
+REALS.o \
+SAJBD.o \
+SBDSC.o \
+SCONT.o \
+SDST.o \
+SLTB.o \
+SLTEV.o \
+SOCIOA.o \
+SOCIOD.o \
+SOLIO.o \
+SOLT.o \
+SPLA.o \
+SPOFC.o \
+SPRNT.o \
+SWN1530.o \
+SWNN.o \
+SWRTNB.o \
+SWRTNR.o \
+SWTN.o \
+TBURN.o \
+THVRT.o \
+TILTBL.o \
+TLOP.o \
+TMIX.o \
+TMXL1.o \
+TRDST.o \
+TRIDIAG.o \
+WDOP.o \
+WGN.o \
+WHLRMX.o \
+WHRL.o \
+WIGV.o \
+WNDIR.o \
+WNSPD.o \
+WRAIN.o \
+WREAD.o \
+WRLHUM.o \
+WRMX.o \
+WRWD.o \
+WSOLRA.o \
+WTAIR.o \
+WTAIX.o \
+MAINmastslave.o
+
+# DManowitz (8/22/11): Changing the timestamp to y-m-d to make comparing
+# based on date & time easier
+TIMESTAMP   := $(shell date +%y-%m-%d@%H-%M)
+
+SRCS  := $(addprefix $(SRC_DIR), $(OBJS_BASE,.o=.F90))
+OBJS  := $(addprefix $(BUILD_DIR), $(OBJS_BASE))
+EXECS := $(BUILD_DIR)epic$(EPIC_VER).$(EXSUFFIX).$(TIMESTAMP)
+
+all: $(EXECS)
+
+# The base dirs needs to exist before the subdirs can be made
+$(BUILD_BASE):
+	mkdir $(BUILD_BASE)
+
+$(BUILD_BASE)$(OPT_SUFFIX): | $(BUILD_BASE)
+	mkdir $(BUILD_BASE)$(OPT_SUFFIX)
+
+$(BUILD_DIR): | $(BUILD_BASE)$(OPT_SUFFIX)
+	mkdir $(BUILD_DIR)
+
+$(EXECS):  $(OBJS) | $(BUILD_DIR)
+	$(F90LINKER) $(FLINKER_OPTS) -o $@ $(OBJS) $(LIB_PATH) $(LIB_LIST)
+
+$(OBJS): $(BUILD_DIR)%.o : $(SRC_DIR)%.F90 | $(BUILD_DIR)
+	$(F90) $(FFLAGS) -o $@ -c $<
+
+#.f.o:
+#	$(F90) $(FFLAGS) -c $*.f
+#.F90.o:
+#	$(F90) $(FFLAGS) -c $*.F90
+# .SUFFIXES:    .F90
+
+clean:
+	rm -f $(OBJS) $(EXECS)

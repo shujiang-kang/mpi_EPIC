@@ -1,0 +1,174 @@
+      SUBROUTINE NRSPC(CS)
+!     EPIC1102
+!     THIS SUBPROGRAM SIMULATES C RESPIRATION USING EQUATIONS TAKEN 
+!     FROM CENTURY.
+      USE PARM
+      XZ=WNO3(ISL)+WNH3(ISL)
+!     AD1=WLSN(ISL)+WLMN(ISL)+WBMN(ISL)+WHSN(ISL)+WHPN(ISL)+XZ
+      RLR=MIN(.8,WLSL(ISL)/(WLS(ISL)+1.E-5))
+	  RHS=PRMT(47)
+      RHP=PRMT(48)
+      XHN=WHSN(ISL)+WHPN(ISL)
+      APCO2=.55
+      ASCO2=.60
+      IF(ISL==LD1)THEN
+          CS=CS*PRMT(51)
+          ABCO2=.55
+          A1CO2=.55
+          RBM=.0164
+          RLM=.0405
+          RLS=.0107
+          HPNC=.1
+          XBM=1.
+    !     COMPUTE N/C RATIOS
+          X1=.1*(WLMN(LD1)+WLSN(LD1))/(RSD(LD1)+1.E-5)
+          IF(X1>2.)THEN
+              BMNC=.1
+              GO TO 6
+          END IF
+          IF(X1>.01)THEN
+              BMNC=1./(20.05-5.0251*X1)
+          ELSE
+              BMNC=.05
+          END IF    
+        6 HSNC=BMNC/(5.*BMNC+1.)
+          GO TO 2
+      END IF
+      ABCO2=.17+.0068*SAN(ISL)
+      A1CO2=.55
+      RBM=.02
+      RLM=.0507
+      RLS=.0132
+      XBM=.25+.0075*SAN(ISL)
+      X1=1000.*(WNH3(ISL)+WNO3(ISL))/WT(ISL)
+      IF(X1>7.15)THEN
+          BMNC=.33
+          HSNC=.083
+          HPNC=.143
+      ELSE
+          BMNC=1./(15.-1.678*X1)
+          HSNC=1./(20.-1.119*X1)
+          HPNC=1./(10.-.42*X1)
+      END IF
+    2 ABP=.003+.00032*CLA(ISL)
+      ASP=MAX(.001,PRMT(45)-.00009*CLA(ISL))
+!     POTENTIAL TRANSFORMATIONS STRUCTURAL LITTER
+      X1=RLS*CS*EXP(-3.*RLR)
+      TLSCP=X1*WLSC(ISL)
+      TLSLCP=TLSCP*RLR
+      TLSLNCP=TLSCP*(1.-RLR)
+      TLSNP=X1*WLSN(ISL)
+!     POTENTIAL TRANSFORMATIONS METABOLIC LITTER
+      X1=RLM*CS
+      TLMCP=WLMC(ISL)*X1
+      TLMNP=WLMN(ISL)*X1
+!     POTENTIAL TRANSFORMATIONS MICROBIAL BIOMASS
+      X1=RBM*CS*XBM
+      TBMCP=WBMC(ISL)*X1
+      TBMNP=WBMN(ISL)*X1
+!     POTENTIAL TRANSFORMATIONS SLOW HUMUS
+      X1=RHS*CS
+      THSCP=WHSC(ISL)*X1
+      THSNP=WHSN(ISL)*X1
+!     POTENTIAL TRANSFORMATIONS PASSIVE HUMUS
+      X1=CS*RHP
+      THPCP=WHPC(ISL)*X1
+      THPNP=WHPN(ISL)*X1
+!     ESTIMATE N DEMAND
+      A1=1.-A1CO2
+      ASX=1.-ASCO2-ASP
+      APX=1.-APCO2
+      PN1=TLSLNCP*A1*BMNC
+      PN2=.7*TLSLCP*HSNC
+      PN3=TLMCP*A1*BMNC
+      PN5=TBMCP*ABP*HPNC
+      PN6=TBMCP*(1.-ABP-ABCO2)*HSNC
+      PN7=THSCP*ASX*BMNC
+      PN8=THSCP*ASP*HPNC
+      PN9=THPCP*APX*BMNC
+!     COMPARE SUPPLY AND DEMAND FOR N
+      SUM=0.
+      CPN1=0.
+      CPN2=0.
+      CPN3=0.
+      CPN4=0.
+      CPN5=0.
+      X1=PN1+PN2
+      IF(TLSNP<X1)THEN
+          CPN1=X1-TLSNP
+      ELSE
+          SUM=SUM+TLSNP-X1
+      END IF
+      IF(TLMNP<PN3)THEN
+          CPN2=PN3-TLMNP
+      ELSE
+          SUM=SUM+TLMNP-PN3
+      END IF
+      X1=PN5+PN6
+      IF(TBMNP<X1)THEN
+          CPN3=X1-TBMNP
+      ELSE
+          SUM=SUM+TBMNP-X1
+      END IF      
+      X1=PN7+PN8
+      IF(THSNP<X1)THEN
+          CPN4=X1-THSNP
+      ELSE
+          SUM=SUM+THSNP-X1
+      END IF
+      IF(THPNP<PN9)THEN
+          CPN5=PN9-THPNP
+      ELSE
+          SUM=SUM+THPNP-PN9
+      END IF
+!     WNH3(ISL)=WNH3(ISL)+SUM
+      WMIN=MAX(1.E-5,WNO3(ISL)+SUM)
+      DMDN=CPN1+CPN2+CPN3+CPN4+CPN5
+      X3=1.
+!     REDUCE DEMAND IF SUPPLY LIMITS
+      IF(WMIN<DMDN)X3=WMIN/DMDN
+!     ACTUAL TRANSFORMATIONS
+      IF(CPN1>0.)THEN
+          TLSCA=TLSCP*X3
+          TLSNA=TLSNP*X3
+          TLSLCA=TLSLCP*X3
+          TLSLNCA=TLSLNCP*X3
+      ELSE
+          TLSCA=TLSCP
+          TLSNA=TLSNP
+          TLSLCA=TLSLCP
+          TLSLNCA=TLSLNCP
+      END IF
+      IF(CPN2>0.)THEN
+          TLMCA=TLMCP*X3
+          TLMNA=TLMNP*X3
+      ELSE
+          TLMCA=TLMCP
+          TLMNA=TLMNP
+      END IF
+      IF(CPN3>0.)THEN
+          TBMCA=TBMCP*X3
+          TBMNA=TBMNP*X3
+      ELSE
+          TBMCA=TBMCP
+          TBMNA=TBMNP
+      END IF
+      IF(CPN4>0.)THEN
+          THSCA=THSCP*X3
+          THSNA=THSNP*X3
+      ELSE
+          THSCA=THSCP
+          THSNA=THSNP
+      END IF
+      IF(CPN5>0.)THEN
+          THPCA=THPCP*X3
+          THPNA=THPNP*X3
+      ELSE
+          THPCA=THPCP
+          THPNA=THPNP
+      END IF
+!     UPDATE
+      RSPC(ISL)=.3*TLSLCA+A1CO2*(TLSLNCA+TLMCA)+ABCO2*TBMCA+ASCO2*THSCA+&
+      APCO2*THPCA
+      RETURN
+      END

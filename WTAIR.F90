@@ -1,0 +1,8 @@
+      SUBROUTINE WTAIR
+!     EPIC1102
+      USE PARM
+      TMX=TXXM+TXSD*WX(1)
+      TMN=TMNM+TNSD*WX(2)
+      IF(TMN>TMX)TMN=TMX-.2*ABS(TMX)
+      RETURN
+      END

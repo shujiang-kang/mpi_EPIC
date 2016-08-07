@@ -1,0 +1,26 @@
+      SUBROUTINE SBDSC(X1,X3,F,J,II)
+!     THIS SUBPROGRAM ESTIMATES THE EFFECT OF BULK DENSITY ON ROOT
+!     GROWTH AND SATURATED CONDUCTIVITY AS A FUNCTION OF TEXTURE
+      USE PARM
+      BD1=X3+.00445*SAN(J)
+      BD2=X3+.35+.005*SAN(J)
+      X2=LOG(.01124*BD1)
+      B2=(X2-LOG(8.*BD2))/(BD1-BD2)
+      B1=X2-B2*BD1
+      X2=B1+B2*X1
+      IF(X2<-10.)THEN
+          F=1.
+          GO TO 6
+      END IF
+      IF(X2>10.)THEN
+          F=.0001
+      ELSE
+          F=X1/(X1+EXP(X2))
+      END IF
+    6 IF(II>2)RETURN
+      IF(ISAT==0.AND.SATC(J)>0.)RETURN
+      XC=100.-CLA(J)
+      SATC(J)=12.7*XC/(XC+EXP(11.45-.097*XC))+1.
+      SATC(J)=F*SATC(J)
+      RETURN
+      END

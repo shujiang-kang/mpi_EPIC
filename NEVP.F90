@@ -1,0 +1,17 @@
+      SUBROUTINE NEVP
+!     EPIC1102
+!     THIS SUBPROGRAM ESTIMATES UPWARD SOLUBLE P MOVEMENT CAUSED BY SOIL
+!     EVAPORATION.
+      USE PARM
+      IF(NEV==1)RETURN
+      TOT=0.
+      DO J=NEV,2,-1
+          ISL=LID(J)
+          IF(AP(ISL)<.001)CYCLE
+          XX=AP(ISL)*MIN(.75,PRMT(43)*SEV(ISL)/WT(ISL))
+          TOT=TOT+XX
+          AP(ISL)=AP(ISL)-XX
+      END DO
+      AP(LD1)=AP(LD1)+TOT
+      RETURN
+      END
